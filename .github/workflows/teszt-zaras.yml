@@ -1,0 +1,54 @@
+name: Teszt-oldal lezárása
+
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'img/**']
+  workflow_dispatch:
+
+concurrency: teszt-zaras
+
+jobs:
+  zaras:
+    runs-on: ubuntu-latest
+    steps:
+      - name: A forrás letöltése
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lezárás StaticCrypttel
+        env:
+          STATICRYPT_PASSWORD: ${{ secrets.STATICRYPT_PASSWORD }}
+        run: |
+          test -n "$STATICRYPT_PASSWORD" || { echo "Hiányzik a STATICRYPT_PASSWORD titok"; exit 1; }
+          npx --yes staticrypt@3.5.4 index.html -p "$STATICRYPT_PASSWORD" --short --remember 30 \
+            -s 65fa2a02d46a9638787d5518b92da127 \
+            --template-title "GaBeN AI projektek – teszt" \
+            --template-placeholder "Jelszó" \
+            --template-button "Belépés" \
+            -c false -d kimenet
+
+      - name: A gaben-teszt repó letöltése
+        uses: actions/checkout@v4
+        with:
+          repository: gabeszface/gaben-teszt
+          token: ${{ secrets.TESZT_DEPLOY_TOKEN }}
+          path: cel
+
+      - name: Feltöltés a gaben-teszt repóba
+        run: |
+          cp kimenet/index.html cel/index.html
+          if [ -d img ]; then rm -rf cel/img && cp -r img cel/img; fi
+          cd cel
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nincs változás"
+          else
+            git commit -m "Teszt-oldal frissítése (automatikus lezárás)"
+            git push
+          fi
